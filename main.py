@@ -48,7 +48,7 @@ def merge_video_audio(video_path, audio_path, output_path):
 # ====== PINTEREST EXTRACTOR ======
 def extract_pinterest_media(pin_url):
     headers = {'User-Agent': 'Mozilla/5.0'}
-    log(f'➡ Chuyển về link gốc: {pin_url}')
+    log(f'➔ Chuyển về link gốc: {pin_url}')
 
     if 'pin.it' in pin_url:
         r = requests.get(pin_url, headers=headers)
@@ -59,7 +59,7 @@ def extract_pinterest_media(pin_url):
                 match = re.search(r'url=(.*?)&', meta['href'])
                 if match:
                     pin_url = match.group(1)
-                    log(f'➡ Link gốc: {pin_url}')
+                    log(f'➔ Link gốc: {pin_url}')
 
     r = requests.get(pin_url, headers=headers)
     soup = BeautifulSoup(r.content, 'html.parser')
@@ -81,10 +81,16 @@ def extract_pinterest_media(pin_url):
 # ====== FACEBOOK VIDEO EXTRACTOR (via page HTML, DASH) ======
 def extract_facebook_dash(link):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.google.com/',
+        'DNT': '1',
+        'Upgrade-Insecure-Requests': '1',
+        'Connection': 'keep-alive'
     }
     try:
-        resp = requests.get(link, headers=headers)
+        resp = requests.get(link, headers=headers, timeout=10)
         if resp.status_code != 200:
             log("❌ Không truy cập được Facebook page")
             return None
