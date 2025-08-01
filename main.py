@@ -78,14 +78,27 @@ def extract_pinterest_media(pin_url):
 
 # ====== FACEBOOK VIDEO EXTRACTOR ======
 def extract_facebook_video_links(fb_url):
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+        # Thêm cookie nếu cần vượt qua quyền riêng tư (chỉ dùng tài khoản phụ!)
+        # 'Cookie': 'c_user=...; xs=...; datr=...;'
+    }
     log(f'➡ Xử lý Facebook URL: {fb_url}')
     try:
-        page = requests.get(fb_url, headers=headers).text
+        session = requests.Session()
+        resp = session.get(fb_url, headers=headers, allow_redirects=True)
+        final_url = resp.url
+        log(f'➡ Link cuối cùng: {final_url}')
+
+        page = resp.text
+        log(f'🔎 Preview HTML: {page[:300]}')  # debug nếu cần
+
         video_matches = re.findall(r'"playable_url":"([^"]+?)"', page)
         audio_matches = re.findall(r'"playable_url_quality_hd":"([^"]+?)"', page)
+
         video_url = video_matches[0].replace("\\u0025", "%").replace("\\", "") if video_matches else None
         audio_url = audio_matches[0].replace("\\u0025", "%").replace("\\", "") if audio_matches else None
+
         return video_url, audio_url
     except Exception as e:
         log(f'❌ Facebook extract error: {e}')
@@ -119,7 +132,7 @@ async def handler(event):
             log(f'📘 Facebook link phát hiện: {link}')
             video_url, audio_url = extract_facebook_video_links(link)
             if not video_url:
-                await event.reply("❌ Không tìm thấy video Facebook hợp lệ.")
+                await event.reply("❌ Không tìm thấy video Facebook hợp lệ. Có thể do quyền riêng tư hoặc mã nguồn trang đã thay đổi.")
                 return
             video_path = os.path.join(output_folder, "video.webm")
             audio_path = os.path.join(output_folder, "audio.webm")
