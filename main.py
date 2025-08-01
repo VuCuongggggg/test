@@ -6,6 +6,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from telethon import TelegramClient, events
 import subprocess
+from urllib.parse import unquote
 
 # ====== CONFIG ======
 api_id = 26652314
@@ -76,32 +77,24 @@ def extract_pinterest_media(pin_url):
 
     return None, None
 
-# ====== FACEBOOK VIDEO EXTRACTOR ======
+# ====== FACEBOOK VIDEO EXTRACTOR (via mbasic) ======
 def extract_facebook_video_links(fb_url):
-    headers = {
-        'User-Agent': 'Mozilla/5.0',
-        # Thêm cookie nếu cần vượt qua quyền riêng tư (chỉ dùng tài khoản phụ!)
-        # 'Cookie': 'c_user=...; xs=...; datr=...;'
-    }
-    log(f'➡ Xử lý Facebook URL: {fb_url}')
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    log(f'➡ Xử lý Facebook URL qua mbasic: {fb_url}')
     try:
-        session = requests.Session()
-        resp = session.get(fb_url, headers=headers, allow_redirects=True)
-        final_url = resp.url
-        log(f'➡ Link cuối cùng: {final_url}')
-
-        page = resp.text
-        log(f'🔎 Preview HTML: {page[:300]}')  # debug nếu cần
-
-        video_matches = re.findall(r'"playable_url":"([^"]+?)"', page)
-        audio_matches = re.findall(r'"playable_url_quality_hd":"([^"]+?)"', page)
-
-        video_url = video_matches[0].replace("\\u0025", "%").replace("\\", "") if video_matches else None
-        audio_url = audio_matches[0].replace("\\u0025", "%").replace("\\", "") if audio_matches else None
-
-        return video_url, audio_url
+        mbasic_url = fb_url.replace("www.", "mbasic.").replace("facebook.com", "mbasic.facebook.com")
+        resp = requests.get(mbasic_url, headers=headers, timeout=5, allow_redirects=True)
+        if resp.status_code != 200:
+            log("❌ Không thể truy cập mbasic.facebook.com")
+            return None, None
+        matches = re.findall(r'/video_redirect/\?src=(.*?)"', resp.text)
+        if not matches:
+            log("❌ Không tìm thấy link video từ mbasic.")
+            return None, None
+        video_url = unquote(matches[0])
+        return video_url, None
     except Exception as e:
-        log(f'❌ Facebook extract error: {e}')
+        log(f'❌ Lỗi khi lấy link video mbasic: {e}')
         return None, None
 
 # ====== MESSAGE HANDLER ======
@@ -130,26 +123,16 @@ async def handler(event):
         elif 'facebook.com' in text or 'fb.watch' in text:
             link = re.search(r'(https?://\S+)', text).group(1)
             log(f'📘 Facebook link phát hiện: {link}')
-            video_url, audio_url = extract_facebook_video_links(link)
+            video_url, _ = extract_facebook_video_links(link)
             if not video_url:
-                await event.reply("❌ Không tìm thấy video Facebook hợp lệ. Có thể do quyền riêng tư hoặc mã nguồn trang đã thay đổi.")
+                await event.reply("❌ Không tìm thấy video Facebook hợp lệ. Có thể do quyền riêng tư hoặc không công khai.")
                 return
-            video_path = os.path.join(output_folder, "video.webm")
-            audio_path = os.path.join(output_folder, "audio.webm")
-            merged_path = os.path.join(output_folder, "merged.webm")
-            download_file(video_url, video_path)
-            if audio_url:
-                download_file(audio_url, audio_path)
-                if merge_video_audio(video_path, audio_path, merged_path):
-                    await client.send_file(target_group, merged_path, caption="🎞 Video đã xử lý từ Facebook!")
-                    os.remove(video_path)
-                    os.remove(audio_path)
-                    os.remove(merged_path)
-                else:
-                    await event.reply("❌ Lỗi khi ghép video/audio.")
-            else:
+            video_path = os.path.join(output_folder, "fb_{}.mp4".format(datetime.now().strftime("%d%m%H%M%S")))
+            if download_file(video_url, video_path):
                 await client.send_file(target_group, video_path, caption="📽 Video từ Facebook")
                 os.remove(video_path)
+            else:
+                await event.reply("❌ Lỗi khi tải video Facebook.")
 
     except Exception as e:
         await event.reply(f"❌ Đã xảy ra lỗi: {e}")
