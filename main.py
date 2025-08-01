@@ -82,7 +82,7 @@ def extract_facebook_video_links(fb_url):
     headers = {'User-Agent': 'Mozilla/5.0'}
     log(f'➡ Xử lý Facebook URL qua mbasic: {fb_url}')
     try:
-        mbasic_url = fb_url.replace("www.", "mbasic.").replace("facebook.com", "mbasic.facebook.com")
+        mbasic_url = fb_url.replace("facebook.com", "mbasic.facebook.com")
         resp = requests.get(mbasic_url, headers=headers, timeout=5, allow_redirects=True)
         if resp.status_code != 200:
             log("❌ Không thể truy cập mbasic.facebook.com")
