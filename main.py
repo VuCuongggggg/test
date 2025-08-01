@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from telethon import TelegramClient, events
 import subprocess
 from urllib.parse import unquote
+import json
 
 # ====== CONFIG ======
 api_id = 26652314
@@ -77,25 +78,34 @@ def extract_pinterest_media(pin_url):
 
     return None, None
 
-# ====== FACEBOOK VIDEO EXTRACTOR (via mbasic) ======
-def extract_facebook_video_links(fb_url):
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    log(f'➡ Xử lý Facebook URL qua mbasic: {fb_url}')
+# ====== FACEBOOK VIDEO EXTRACTOR (via page HTML, DASH) ======
+def extract_facebook_dash(link):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    }
     try:
-        mbasic_url = fb_url.replace("facebook.com", "mbasic.facebook.com")
-        resp = requests.get(mbasic_url, headers=headers, timeout=5, allow_redirects=True)
+        resp = requests.get(link, headers=headers)
         if resp.status_code != 200:
-            log("❌ Không thể truy cập mbasic.facebook.com")
-            return None, None
-        matches = re.findall(r'/video_redirect/\?src=(.*?)"', resp.text)
-        if not matches:
-            log("❌ Không tìm thấy link video từ mbasic.")
-            return None, None
-        video_url = unquote(matches[0])
-        return video_url, None
+            log("❌ Không truy cập được Facebook page")
+            return None
+        link = resp.url.split('?')[0]
+        text = resp.text
+        video_id = ''
+        for part in link.split('/'):
+            if part.isdigit():
+                video_id = part
+        try:
+            target = text.split(f'"video_id":"{video_id}"')[1].split('"dash_prefetch_experimental":[')[1].split(']')[0]
+        except:
+            log("❌ Không phân tích được dash_prefetch")
+            return None
+        sources = json.loads(f'[{target}]')
+        video_link = text.split(f'"representation_id":"{sources[0]}"')[1].split('"base_url":"')[1].split('"')[0].replace('\\', '')
+        audio_link = text.split(f'"representation_id":"{sources[1]}"')[1].split('"base_url":"')[1].split('"')[0].replace('\\', '')
+        return video_link, audio_link, video_id
     except Exception as e:
-        log(f'❌ Lỗi khi lấy link video mbasic: {e}')
-        return None, None
+        log(f"❌ Lỗi DASH extract: {e}")
+        return None
 
 # ====== MESSAGE HANDLER ======
 @client.on(events.NewMessage)
@@ -119,20 +129,28 @@ async def handler(event):
             else:
                 await event.reply("❌ Lỗi khi tải hoặc gửi media từ Pinterest.")
 
-        # === FACEBOOK ===
+        # === FACEBOOK DASH ===
         elif 'facebook.com' in text or 'fb.watch' in text:
             link = re.search(r'(https?://\S+)', text).group(1)
             log(f'📘 Facebook link phát hiện: {link}')
-            video_url, _ = extract_facebook_video_links(link)
-            if not video_url:
-                await event.reply("❌ Không tìm thấy video Facebook hợp lệ. Có thể do quyền riêng tư hoặc không công khai.")
+            result = extract_facebook_dash(link)
+            if not result:
+                await event.reply("❌ Không thể lấy video Facebook. Có thể bị chặn hoặc sai định dạng.")
                 return
-            video_path = os.path.join(output_folder, "fb_{}.mp4".format(datetime.now().strftime("%d%m%H%M%S")))
-            if download_file(video_url, video_path):
-                await client.send_file(target_group, video_path, caption="📽 Video từ Facebook")
+            video_link, audio_link, video_id = result
+            video_path = os.path.join(output_folder, 'fb_video.mp4')
+            audio_path = os.path.join(output_folder, 'fb_audio.mp4')
+            final_path = os.path.join(output_folder, f'{video_id}.mp4')
+            download_file(video_link, video_path)
+            download_file(audio_link, audio_path)
+            if merge_video_audio(video_path, audio_path, final_path):
+                await client.send_file(target_group, final_path)
                 os.remove(video_path)
+                os.remove(audio_path)
+                os.remove(final_path)
+                log("✅ Gửi và xoá file xong")
             else:
-                await event.reply("❌ Lỗi khi tải video Facebook.")
+                await event.reply("❌ Lỗi khi ghép video và audio.")
 
     except Exception as e:
         await event.reply(f"❌ Đã xảy ra lỗi: {e}")
