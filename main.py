@@ -5,9 +5,7 @@ import logging
 from datetime import datetime
 from bs4 import BeautifulSoup
 from telethon import TelegramClient, events
-import subprocess
 from urllib.parse import unquote
-import json
 
 # ====== CONFIG ======
 api_id = 26652314
@@ -72,10 +70,13 @@ def extract_pinterest_media(pin_url):
 
     return None, None
 
-# ====== FACEBOOK BASIC API EXTRACTOR (SD/HD) ======
+# ====== FACEBOOK BASIC EXTRACTOR ======
 def extract_facebook_basic(link):
     try:
-        html = requests.get(link)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        html = requests.get(link, headers=headers, timeout=10)
         hd = re.search('hd_src:"(.+?)"', html.text)
         sd = re.search('sd_src:"(.+?)"', html.text)
         if hd:
@@ -110,7 +111,7 @@ async def handler(event):
             else:
                 await event.reply("❌ Lỗi khi tải hoặc gửi media từ Pinterest.")
 
-        # === FACEBOOK BASIC ===
+        # === FACEBOOK VIDEO ===
         elif 'facebook.com' in text or 'fb.watch' in text:
             link = re.search(r'(https?://\S+)', text).group(1)
             log(f'📘 Facebook link phát hiện: {link}')
