@@ -5,16 +5,11 @@ import logging
 from datetime import datetime
 from bs4 import BeautifulSoup
 from telethon import TelegramClient, events
-from urllib.parse import unquote
 
 # ====== CONFIG ======
 api_id = 26652314
 api_hash = '16e1dd8417c00068767fc6fc9a65f6b7'
 target_group = -4820398082
-output_folder = "Output"
-
-if not os.path.exists(output_folder):
-    os.makedirs(output_folder)
 
 # ====== TELETHON SETUP ======
 client = TelegramClient('session', api_id, api_hash)
@@ -23,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 def log(msg):
     print(f'[🌀] {msg}')
 
-# ====== UTILS ======
+# ====== DOWNLOAD FUNCTION ======
 def download_file(url, filename):
     log(f'⬇️ Đang tải: {url}')
     try:
@@ -70,32 +65,12 @@ def extract_pinterest_media(pin_url):
 
     return None, None
 
-# ====== FACEBOOK BASIC EXTRACTOR ======
-def extract_facebook_basic(link):
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-        html = requests.get(link, headers=headers, timeout=10)
-        hd = re.search('hd_src:"(.+?)"', html.text)
-        sd = re.search('sd_src:"(.+?)"', html.text)
-        if hd:
-            return hd.group(1)
-        elif sd:
-            return sd.group(1)
-        else:
-            return None
-    except Exception as e:
-        log(f'❌ Lỗi khi lấy Facebook video: {e}')
-        return None
-
 # ====== MESSAGE HANDLER ======
 @client.on(events.NewMessage)
 async def handler(event):
     try:
         text = event.raw_text
 
-        # === PINTEREST ===
         if 'pinterest.com' in text or 'pin.it' in text:
             link = re.search(r'(https?://\S+)', text).group(1)
             log(f'📌 Pinterest link phát hiện: {link}')
@@ -111,27 +86,11 @@ async def handler(event):
             else:
                 await event.reply("❌ Lỗi khi tải hoặc gửi media từ Pinterest.")
 
-        # === FACEBOOK VIDEO ===
-        elif 'facebook.com' in text or 'fb.watch' in text:
-            link = re.search(r'(https?://\S+)', text).group(1)
-            log(f'📘 Facebook link phát hiện: {link}')
-            video_url = extract_facebook_basic(link)
-            if not video_url:
-                await event.reply("❌ Không tìm thấy video Facebook hợp lệ.")
-                return
-            filename = os.path.join(output_folder, datetime.now().strftime("fb_%d%m%H%M%S") + ".mp4")
-            if download_file(video_url, filename):
-                await client.send_file(target_group, filename)
-                os.remove(filename)
-                log(f'✅ Gửi video Facebook xong')
-            else:
-                await event.reply("❌ Lỗi khi tải video Facebook.")
-
     except Exception as e:
         await event.reply(f"❌ Đã xảy ra lỗi: {e}")
         log(f'[Lỗi] {e}')
 
 # ====== START BOT ======
 with client:
-    log("🤖 Bot đang chạy — xử lý link Pinterest và Facebook tự động.")
+    log("🤖 Bot đang chạy — chỉ xử lý link Pinterest.")
     client.run_until_disconnected()
